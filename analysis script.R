@@ -135,3 +135,70 @@ plot[[1]] <- plot[[1]] + labs(subtitle = paste0("(NES=", signif(y@result$NES[gs2
                                                 "; FDR q=", signif(y@result$qvalue[gs2p],3), ")"))
 
 plot
+
+##Part 2
+
+load("C:/Users/ahgod/Documents/MEDI6227/MEDI6227-workshop-4/Session4_practical(1).Rdata")
+
+#convert gene symbols to ENTREZID ID - create in new DF
+gene.df1 <- bitr(DE.blocked.treat$gene_name, 
+                fromType = "SYMBOL",
+                toType = "ENTREZID",
+                OrgDb = org.Hs.eg.db)
+
+DE.blocked.treat <- left_join(DE.blocked.treat, gene.df1, by = c("gene_name" = "SYMBOL"))
+
+DE.blocked.treat$DE_cat <- 
+  ifelse(DE.blocked.treat$logFC > 0 &  DE.blocked.treat$FDR < 0.01, "M2", 
+         ifelse(DE.blocked.treat$logFC <0 &  DE.blocked.treat$FDR < 0.01, "M1", NA))
+
+pA <- DE.blocked.treat %>%
+  ggplot(aes(x = logFC, y = -log10(FDR), colour = DE_cat)) +
+  geom_point(size = 0.1) +
+  theme_pubr(base_size = 7) + 
+  theme(legend.title = element_blank(), legend.position = "right", legend.key.size = unit(5, "pt")) +
+  scale_color_discrete()
+
+cols <- ggpubr::get_palette(k = 2)
+
+ck <- compareCluster(ENTREZID ~ DE_cat, data = DE.blocked.treat,
+                     fun = enrichGO,
+                     OrgDb = org.Hs.eg.db, 
+                     universe = DE.blocked.treat$ENTREZID,
+                     ont = "BP", readable = T)
+
+pB <- dotplot(ck, label_format = 50) +
+  theme_pubr(base_size = 7) + 
+  scale_size(range = c(0.5,2)) +
+  theme(legend.position = "right", legend.key.size = unit(5, "pt"))
+
+M1_ego <- enrichGO(gene          = DE.blocked.treat$ENTREZID[DE.blocked.treat$DE_cat == "M1"],
+                   universe      = DE.blocked.treat$ENTREZID,
+                   OrgDb         = org.Hs.eg.db,
+                   ont           = "BP",
+                   readable      = TRUE)
+
+M1_ego <- pairwise_termsim(M1_ego)
+pC <- cnetplot(M1_ego, showCategory = c("cytokine-mediated signaling pathway", "response to type II interferon"),
+               cex.params = list(gene_label = 0.5, category_label = 0.5),
+               color.params = list(category = cols[1])) +
+  theme_void(base_size = 7)
+
+M2_ego <- enrichGO(gene          = DE.blocked.treat$ENTREZID[DE.blocked.treat$DE_cat == "M2"],
+                   universe      = DE.blocked.treat$ENTREZID,
+                   OrgDb         = org.Hs.eg.db,
+                   ont           = "BP",
+                   readable      = TRUE)
+
+M2_ego <- pairwise_termsim(M2_ego)
+
+pD <- cnetplot(M2_ego, showCategory = c("response to toxic substance", "positive regulation of wound healing"),
+               cex.params = list(gene_label = 0.5, category_label = 0.5),
+               color.params = list(category = cols[2])) +
+  theme_void(base_size = 7) 
+
+pABCD <- 
+  ggarrange(ggarrange(pA, pB, ncol = 2, nrow = 1, labels = "AUTO", widths = c(1,2), align = "h"),
+            pC,pD,
+            ncol = 1, nrow = 3, labels = c("", "C", "D") )
+pABCD
